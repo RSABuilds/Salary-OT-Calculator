@@ -3,6 +3,7 @@ import { AppSettings, DayRecord, AttendanceStatus, MonthSummary } from '../types
 
 /**
  * Calculates the monthly summary.
+ * Professional Salaried Model: Total = Monthly Salary - (Absences * Daily Rate) + (OT * OT Rate)
  */
 export const calculateSummary = (
   settings: AppSettings,
@@ -10,6 +11,7 @@ export const calculateSummary = (
 ): MonthSummary => {
   const { monthlySalary, workingDaysPerMonth, workingHoursPerDay, otRateMode, manualOtRate } = settings;
   
+  // Daily rate is calculated based on the standard working days in a month
   const dailyRate = monthlySalary / (workingDaysPerMonth || 1);
   const hourlyRate = dailyRate / (workingHoursPerDay || 1);
   
@@ -31,10 +33,15 @@ export const calculateSummary = (
     }
   });
 
-  const baseEarnings = presentDays * dailyRate;
+  // Base earnings in a Salaried context is usually the full contract amount
+  const baseEarnings = monthlySalary;
+  // Deductions for days not worked
   const absentDeduction = absentDays * dailyRate;
+  // Extra earnings for OT
   const otEarnings = totalOtHours * effectiveOtRate;
-  const totalEarnings = baseEarnings + otEarnings;
+  
+  // Net Total
+  const totalEarnings = baseEarnings - absentDeduction + otEarnings;
 
   return {
     presentDays,
@@ -53,17 +60,16 @@ export const getDaysInMonth = (year: number, month: number) => {
 
 export const formatCurrency = (value: number, currencyCode: string = 'USD') => {
   try {
+    // Ensure code is valid before formatting
+    const safeCode = currencyCode && currencyCode.length === 3 ? currencyCode : 'USD';
     return new Intl.NumberFormat(undefined, {
       style: 'currency',
-      currency: currencyCode,
+      currency: safeCode,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(value);
   } catch (e) {
-    // Fallback if currency code is invalid
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(value);
+    // Ultimate fallback if Intl fails
+    return `${value.toFixed(2)}`;
   }
 };

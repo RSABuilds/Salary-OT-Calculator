@@ -24,6 +24,7 @@ export interface AppSettings {
   isLoggedIn: boolean;
   lastSyncedAt?: string;
   syncEnabled: boolean;
+  offDays: number[]; // 0 for Sunday, 1 for Monday, etc.
 }
 
 export interface MonthSummary {

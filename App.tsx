@@ -6,9 +6,24 @@ import SettingsPanel from './components/SettingsPanel';
 import AttendanceCalendar from './components/AttendanceCalendar';
 import DashboardSummary from './components/DashboardSummary';
 import LoginView from './components/LoginView';
-import { Briefcase, User, ShieldCheck, Trash2, ChevronRight, LogOut, Cloud, RefreshCw } from 'lucide-react';
+import StoragePermissionModal from './components/StoragePermissionModal';
+import { Briefcase, User, ShieldCheck, Trash2, ChevronRight, LogOut, Cloud, RefreshCw, Wifi, WifiOff, Sun, Moon } from 'lucide-react';
 
 const App: React.FC = () => {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  
+  // Theme management: Detect system or saved preference
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('app_theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
+
+  // Storage access tracking
+  const [hasStorageAccess, setHasStorageAccess] = useState<boolean>(() => {
+    return localStorage.getItem('app_storage_authorized') === 'true';
+  });
+
   const [settings, setSettings] = useState<AppSettings>(() => {
     const saved = localStorage.getItem('salary_settings_current');
     return saved ? JSON.parse(saved) : {
@@ -22,7 +37,8 @@ const App: React.FC = () => {
       countryName: 'United States',
       mobileNumber: '',
       isLoggedIn: false,
-      syncEnabled: true
+      syncEnabled: true,
+      offDays: [0] // Sunday default
     };
   });
 
@@ -32,46 +48,62 @@ const App: React.FC = () => {
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
   const profileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Persistence Logic: Maps data to mobile number for "Cloud Sync"
-  const getCloudKey = (mobile: string, type: 'settings' | 'records') => `cloud_v1_${type}_${mobile}`;
-
-  // Initial Data Fetch/Hydration on Login
+  // Synchronize theme with HTML root class
   useEffect(() => {
-    if (settings.isLoggedIn && settings.mobileNumber) {
-      const cloudSettingsKey = getCloudKey(settings.mobileNumber, 'settings');
-      const cloudRecordsKey = getCloudKey(settings.mobileNumber, 'records');
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('app_theme', theme);
+  }, [theme]);
+
+  // Online status monitoring
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  const getStorageKey = (mobile: string, type: 'settings' | 'records') => `salary_data_v2_${type}_${mobile}`;
+
+  // Data hydration
+  useEffect(() => {
+    if (settings.isLoggedIn && settings.mobileNumber && hasStorageAccess) {
+      const storageSettingsKey = getStorageKey(settings.mobileNumber, 'settings');
+      const storageRecordsKey = getStorageKey(settings.mobileNumber, 'records');
       
-      const savedSettings = localStorage.getItem(cloudSettingsKey);
-      const savedRecords = localStorage.getItem(cloudRecordsKey);
+      const savedSettings = localStorage.getItem(storageSettingsKey);
+      const savedRecords = localStorage.getItem(storageRecordsKey);
 
       if (savedSettings) setSettings(JSON.parse(savedSettings));
       if (savedRecords) setRecords(JSON.parse(savedRecords));
-      else setRecords({}); // Clear if no cloud records exist
+      else setRecords({}); 
     }
-  }, [settings.isLoggedIn, settings.mobileNumber]);
+  }, [settings.isLoggedIn, settings.mobileNumber, hasStorageAccess]);
 
-  // Background Auto-Sync to "Cloud"
+  // Real-time persistence
   useEffect(() => {
-    if (settings.isLoggedIn && settings.mobileNumber) {
+    if (settings.isLoggedIn && settings.mobileNumber && hasStorageAccess) {
       setSyncStatus('syncing');
-      
-      const timer = setTimeout(() => {
-        const cloudSettingsKey = getCloudKey(settings.mobileNumber, 'settings');
-        const cloudRecordsKey = getCloudKey(settings.mobileNumber, 'records');
-        
-        const settingsToSave = { ...settings, lastSyncedAt: new Date().toISOString() };
-        
-        localStorage.setItem(cloudSettingsKey, JSON.stringify(settingsToSave));
-        localStorage.setItem(cloudRecordsKey, JSON.stringify(records));
-        localStorage.setItem('salary_settings_current', JSON.stringify(settingsToSave));
-        
-        setSyncStatus('synced');
-      }, 800);
-
+      const storageSettingsKey = getStorageKey(settings.mobileNumber, 'settings');
+      const storageRecordsKey = getStorageKey(settings.mobileNumber, 'records');
+      const settingsToSave = { ...settings, lastSyncedAt: new Date().toISOString() };
+      localStorage.setItem(storageSettingsKey, JSON.stringify(settingsToSave));
+      localStorage.setItem(storageRecordsKey, JSON.stringify(records));
+      localStorage.setItem('salary_settings_current', JSON.stringify(settingsToSave));
+      const timer = setTimeout(() => setSyncStatus('synced'), 600);
       return () => clearTimeout(timer);
     }
-  }, [settings, records]);
+  }, [settings, records, hasStorageAccess]);
 
+  // Close profile menu on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
@@ -101,117 +133,106 @@ const App: React.FC = () => {
   };
 
   const handleLogin = (loginData: Partial<AppSettings>) => {
-    // Reset memory before login to prevent flash of old data
     setRecords({}); 
-    setSettings(prev => ({
-      ...prev,
-      ...loginData,
-      isLoggedIn: true
-    }));
+    setSettings(prev => ({ ...prev, ...loginData, isLoggedIn: true }));
   };
 
   const handleLogout = () => {
-    if (window.confirm('Log out of this session? Your progress is saved in the cloud.')) {
-      // 1. Clear current session identifier
+    if (window.confirm('Log out of your profile? Your local data will remain saved.')) {
       localStorage.removeItem('salary_settings_current');
-      
-      // 2. Clear memory state
       setRecords({});
-      setSettings(prev => ({
-        ...prev,
-        isLoggedIn: false,
-        mobileNumber: '' 
-      }));
-      
-      // 3. Close menu
+      setSettings(prev => ({ ...prev, isLoggedIn: false, mobileNumber: '' }));
       setIsProfileOpen(false);
     }
   };
 
   const handleClearData = () => {
-    if (window.confirm('WARNING: This will permanently erase ALL records and settings for this phone number from the cloud. Continue?')) {
+    if (window.confirm('Erase all local logs? This cannot be undone.')) {
       const mobile = settings.mobileNumber;
       if (!mobile) return;
-
-      const cloudSettingsKey = getCloudKey(mobile, 'settings');
-      const cloudRecordsKey = getCloudKey(mobile, 'records');
-      
-      // 1. Nuke cloud storage
-      localStorage.removeItem(cloudSettingsKey);
-      localStorage.removeItem(cloudRecordsKey);
-      
-      // 2. Nuke current session
+      localStorage.removeItem(getStorageKey(mobile, 'settings'));
+      localStorage.removeItem(getStorageKey(mobile, 'records'));
       localStorage.removeItem('salary_settings_current');
-      
-      // 3. Reset app completely via reload for maximum safety
+      localStorage.removeItem('app_storage_authorized');
       window.location.reload();
     }
   };
+
+  const handleGrantStorageAccess = () => {
+    localStorage.setItem('app_storage_authorized', 'true');
+    setHasStorageAccess(true);
+  };
+
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+
+  // Render view states
+  if (!hasStorageAccess) {
+    return <StoragePermissionModal onGrant={handleGrantStorageAccess} />;
+  }
 
   if (!settings.isLoggedIn) {
     return <LoginView onLogin={handleLogin} />;
   }
 
   return (
-    <div className="min-h-screen bg-[#F2F2F7] flex flex-col font-sans selection:bg-indigo-100 transition-colors duration-500 overflow-x-hidden">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-[#F2F2F7]/85 backdrop-blur-xl border-b border-black/[0.04]">
+    <div className="min-h-screen bg-[#F2F2F7] dark:bg-slate-950 flex flex-col font-sans selection:bg-indigo-100 dark:selection:bg-indigo-900/40 transition-colors duration-500 overflow-x-hidden">
+      <header className="sticky top-0 z-50 bg-[#F2F2F7]/85 dark:bg-slate-950/85 backdrop-blur-xl border-b border-black/[0.04] dark:border-white/[0.04]">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-10 h-16 sm:h-20 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="bg-slate-900 w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-[1.2rem] flex items-center justify-center shadow-lg active:scale-95 transition-transform">
+            <div className="bg-slate-900 dark:bg-indigo-600 w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-[1.2rem] flex items-center justify-center shadow-lg active:scale-95 transition-transform">
               <Briefcase className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
-            <h1 className="text-[14px] sm:text-xl font-black text-slate-900 uppercase tracking-tight">Salary <span className="text-indigo-600">OT Calculator</span></h1>
+            <h1 className="text-[14px] sm:text-xl font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight">Salary <span className="text-indigo-600 dark:text-indigo-400">OT Calculator</span></h1>
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-6">
-            <div className={`hidden md:flex items-center gap-2.5 px-4 py-2 rounded-full border border-black/[0.04] bg-white shadow-sm transition-all duration-500 ${syncStatus === 'syncing' ? 'opacity-100' : 'opacity-60 hover:opacity-100'}`}>
-               <div className="relative">
-                 <Cloud className={`w-4 h-4 ${syncStatus === 'syncing' ? 'text-indigo-400' : 'text-indigo-600'}`} />
-                 {syncStatus === 'syncing' && <RefreshCw className="w-2.5 h-2.5 text-indigo-600 absolute -top-1 -right-1 animate-spin" />}
-               </div>
-               <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                 {syncStatus === 'syncing' ? 'Cloud Syncing...' : 'Cloud Active'}
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="hidden sm:flex items-center gap-2.5 px-4 py-2 rounded-full border border-black/[0.04] dark:border-white/[0.04] bg-white dark:bg-slate-900 shadow-sm transition-all duration-500">
+               {isOnline ? (
+                 <Cloud className={`w-4 h-4 ${syncStatus === 'syncing' ? 'text-indigo-400' : 'text-indigo-500'}`} />
+               ) : (
+                 <WifiOff className="w-4 h-4 text-rose-500" />
+               )}
+               <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                 {!isOnline ? 'Local Mode' : syncStatus === 'syncing' ? 'Syncing...' : 'Synced'}
                </span>
             </div>
+
+            <button 
+              onClick={toggleTheme}
+              aria-label="Toggle Theme"
+              className="h-9 w-9 sm:h-11 sm:w-11 rounded-xl sm:rounded-2xl flex items-center justify-center bg-white dark:bg-slate-900 border border-black/[0.05] dark:border-white/[0.05] text-slate-400 dark:text-indigo-300 transition-all hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              {theme === 'light' ? <Moon className="w-4 h-4 sm:w-5 sm:h-5" /> : <Sun className="w-4 h-4 sm:w-5 sm:h-5" />}
+            </button>
 
             <div className="relative" ref={profileMenuRef}>
               <button 
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
-                className={`h-9 w-9 sm:h-11 sm:w-11 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all border ${isProfileOpen ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-400 border-black/[0.05]'}`}
+                className={`h-9 w-9 sm:h-11 sm:w-11 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all border ${isProfileOpen ? 'bg-indigo-600 text-white border-indigo-600 shadow-xl shadow-indigo-200 dark:shadow-none' : 'bg-white dark:bg-slate-900 text-slate-400 border-black/[0.05] dark:border-white/[0.05]'}`}
               >
                  <User className="w-4 h-4 sm:w-5 sm:h-5" />
               </button>
 
               {isProfileOpen && (
-                <div className="absolute right-0 mt-2 sm:mt-3 w-[280px] sm:w-80 bg-white rounded-[1.8rem] sm:rounded-[2rem] shadow-2xl border border-black/[0.05] overflow-hidden animate-in fade-in zoom-in-95 origin-top-right">
-                  <div className="p-5 sm:p-6 bg-slate-900 text-white">
+                <div className="absolute right-0 mt-2 sm:mt-3 w-[280px] sm:w-80 bg-white dark:bg-slate-900 rounded-[1.8rem] sm:rounded-[2rem] shadow-2xl border border-black/[0.05] dark:border-white/[0.05] overflow-hidden animate-in fade-in zoom-in-95 origin-top-right">
+                  <div className="p-5 sm:p-6 bg-slate-900 dark:bg-slate-950 text-white">
                     <div className="flex items-center gap-3 sm:gap-4 mb-4">
                       <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-indigo-500 flex items-center justify-center font-black text-xs sm:text-sm">
                         {settings.currencySymbol}
                       </div>
                       <div className="min-w-0">
                         <h4 className="font-black text-[13px] sm:text-[15px] truncate">ID: {settings.mobileNumber}</h4>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{settings.countryName} Profile</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{settings.countryName}</p>
                       </div>
-                    </div>
-                    <div className="bg-white/10 rounded-xl p-3 backdrop-blur-md flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-[9px] text-emerald-300 font-black uppercase tracking-wider">Cloud Secured</span>
-                      </div>
-                      <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest ml-5">
-                        Last sync: {settings.lastSyncedAt ? new Date(settings.lastSyncedAt).toLocaleTimeString() : 'Just now'}
-                      </p>
                     </div>
                   </div>
-                  <div className="p-3 sm:p-4">
-                    <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-[12px] sm:text-[13px] font-black text-slate-600 hover:bg-slate-50 rounded-lg transition-colors text-left">
-                      <LogOut className="w-4 h-4 text-slate-400" />
-                      Sign Out (Cloud Persist)
+                  <div className="p-3 sm:p-4 bg-white dark:bg-slate-900">
+                    <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-[12px] sm:text-[13px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors text-left">
+                      <LogOut className="w-4 h-4 text-slate-400 dark:text-slate-500" />
+                      Sign Out
                     </button>
-                    <button onClick={handleClearData} className="w-full flex items-center justify-between px-4 py-3 text-[12px] sm:text-[13px] font-black text-rose-500 hover:bg-rose-50 rounded-lg transition-all group text-left">
-                      <div className="flex items-center gap-3"><Trash2 className="w-4 h-4" />Delete Everything</div>
+                    <button onClick={handleClearData} className="w-full flex items-center justify-between px-4 py-3 text-[12px] sm:text-[13px] font-black text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg transition-all group text-left">
+                      <div className="flex items-center gap-3"><Trash2 className="w-4 h-4" />Delete Local Cache</div>
                       <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
                     </button>
                   </div>
@@ -222,26 +243,28 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-[1400px] mx-auto px-4 sm:px-10 py-6 sm:py-12 space-y-8 sm:space-y-12 w-full flex-1">
+      <main className="max-w-[1400px] mx-auto px-4 sm:px-10 py-6 sm:py-12 space-y-8 sm:space-y-12 w-full flex-1 transition-colors duration-500">
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 sm:gap-10">
           <div className="xl:col-span-4 lg:sticky lg:top-28">
             <SettingsPanel settings={settings} onSettingsChange={setSettings} />
           </div>
           <div className="xl:col-span-8">
-            <AttendanceCalendar currentDate={currentDate} onDateChange={setCurrentDate} records={records} onUpdateRecord={handleUpdateRecord} />
+            <AttendanceCalendar settings={settings} onSettingsChange={setSettings} currentDate={currentDate} onDateChange={setCurrentDate} records={records} onUpdateRecord={handleUpdateRecord} />
           </div>
         </div>
 
-        <section className="pt-8 sm:pt-12 border-t border-black/[0.05]">
+        <section className="pt-8 sm:pt-12 border-t border-black/[0.05] dark:border-white/[0.05]">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 sm:mb-10 gap-3">
             <div className="space-y-1">
-              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Payout Analysis</h2>
-              <p className="text-[11px] sm:text-sm font-bold text-slate-400 uppercase tracking-widest">{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })} Report</p>
+              <h2 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Payout Analysis</h2>
+              <p className="text-[11px] sm:text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{currentDate.toLocaleString('default', { month: 'long', year: 'numeric' })} Report</p>
             </div>
-            <div className="flex items-center self-start sm:self-center gap-2 px-4 py-2 bg-white text-emerald-600 rounded-xl border border-black/[0.03] shadow-sm">
-              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-              <span className="text-[9px] font-black uppercase tracking-widest">Active Data Stream</span>
-            </div>
+            {!isOnline && (
+              <div className="flex items-center self-start sm:self-center gap-2 px-4 py-2 bg-amber-50 dark:bg-amber-900/10 text-amber-600 dark:text-amber-400 rounded-xl border border-amber-100 dark:border-amber-900/20 shadow-sm">
+                <WifiOff className="w-3 h-3" />
+                <span className="text-[9px] font-black uppercase tracking-widest">Offline Mode Active</span>
+              </div>
+            )}
           </div>
           <DashboardSummary summary={summary} settings={settings} currentDate={currentDate} />
         </section>

@@ -10,6 +10,32 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Critical: Configure Tailwind to use the 'class' strategy for dark mode
+        tailwind.config = {
+          darkMode: 'class',
+          theme: {
+            extend: {
+              transitionTimingFunction: {
+                'out-expo': 'cubic-bezier(0.19, 1, 0.22, 1)',
+              }
+            }
+          }
+        }
+
+        // Prevent theme flicker: Apply the theme immediately before the body renders
+        (function() {
+          try {
+            const savedTheme = localStorage.getItem('app_theme');
+            const systemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (savedTheme === 'dark' || (!savedTheme && systemDark)) {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+          } catch (e) {}
+        })();
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <!-- Excel Generation Library -->
     <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
@@ -19,6 +45,10 @@
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
         }
+        /* Match background to app colors to prevent flashes */
+        html { background-color: #F2F2F7; transition: background-color 0.5s ease; }
+        html.dark { background-color: #020617; }
+        
         ::-webkit-scrollbar {
           width: 6px;
           height: 6px;
@@ -27,6 +57,9 @@
         ::-webkit-scrollbar-thumb {
           background: #e2e8f0;
           border-radius: 10px;
+        }
+        .dark ::-webkit-scrollbar-thumb {
+          background: #1e293b;
         }
     </style>
 <script type="importmap">
@@ -41,7 +74,7 @@
 }
 </script>
 </head>
-<body class="bg-[#F8FAFC] text-slate-900 overflow-x-hidden">
+<body class="bg-[#F2F2F7] dark:bg-slate-950 text-slate-900 dark:text-slate-100 overflow-x-hidden">
     <div id="root"></div>
     <script>
         if ('serviceWorker' in navigator) {
