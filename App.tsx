@@ -46,6 +46,7 @@ const App: React.FC = () => {
 
       if (savedSettings) setSettings(JSON.parse(savedSettings));
       if (savedRecords) setRecords(JSON.parse(savedRecords));
+      else setRecords({}); // Clear if no cloud records exist
     }
   }, [settings.isLoggedIn, settings.mobileNumber]);
 
@@ -100,6 +101,8 @@ const App: React.FC = () => {
   };
 
   const handleLogin = (loginData: Partial<AppSettings>) => {
+    // Reset memory before login to prevent flash of old data
+    setRecords({}); 
     setSettings(prev => ({
       ...prev,
       ...loginData,
@@ -108,20 +111,39 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
-    if (window.confirm('Do you want to log out? Your data is securely saved in the cloud.')) {
-      setSettings(prev => ({ ...prev, isLoggedIn: false }));
+    if (window.confirm('Log out of this session? Your progress is saved in the cloud.')) {
+      // 1. Clear current session identifier
       localStorage.removeItem('salary_settings_current');
+      
+      // 2. Clear memory state
+      setRecords({});
+      setSettings(prev => ({
+        ...prev,
+        isLoggedIn: false,
+        mobileNumber: '' 
+      }));
+      
+      // 3. Close menu
       setIsProfileOpen(false);
     }
   };
 
   const handleClearData = () => {
-    if (window.confirm('Erase your cloud data for this mobile number? This action is permanent.')) {
-      const cloudSettingsKey = getCloudKey(settings.mobileNumber, 'settings');
-      const cloudRecordsKey = getCloudKey(settings.mobileNumber, 'records');
+    if (window.confirm('WARNING: This will permanently erase ALL records and settings for this phone number from the cloud. Continue?')) {
+      const mobile = settings.mobileNumber;
+      if (!mobile) return;
+
+      const cloudSettingsKey = getCloudKey(mobile, 'settings');
+      const cloudRecordsKey = getCloudKey(mobile, 'records');
+      
+      // 1. Nuke cloud storage
       localStorage.removeItem(cloudSettingsKey);
       localStorage.removeItem(cloudRecordsKey);
+      
+      // 2. Nuke current session
       localStorage.removeItem('salary_settings_current');
+      
+      // 3. Reset app completely via reload for maximum safety
       window.location.reload();
     }
   };
@@ -139,7 +161,7 @@ const App: React.FC = () => {
             <div className="bg-slate-900 w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-[1.2rem] flex items-center justify-center shadow-lg active:scale-95 transition-transform">
               <Briefcase className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
-            <h1 className="text-[15px] sm:text-xl font-black text-slate-900 uppercase tracking-tight">Salary <span className="text-indigo-600">OT Calculator</span></h1>
+            <h1 className="text-[14px] sm:text-xl font-black text-slate-900 uppercase tracking-tight">Salary <span className="text-indigo-600">OT Calculator</span></h1>
           </div>
 
           <div className="flex items-center gap-3 sm:gap-6">
@@ -176,21 +198,21 @@ const App: React.FC = () => {
                     <div className="bg-white/10 rounded-xl p-3 backdrop-blur-md flex flex-col gap-1">
                       <div className="flex items-center gap-2">
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                        <span className="text-[9px] text-emerald-300 font-black uppercase tracking-wider">Cloud Connected</span>
+                        <span className="text-[9px] text-emerald-300 font-black uppercase tracking-wider">Cloud Secured</span>
                       </div>
                       <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest ml-5">
-                        Last sync: {settings.lastSyncedAt ? new Date(settings.lastSyncedAt).toLocaleTimeString() : 'Never'}
+                        Last sync: {settings.lastSyncedAt ? new Date(settings.lastSyncedAt).toLocaleTimeString() : 'Just now'}
                       </p>
                     </div>
                   </div>
                   <div className="p-3 sm:p-4">
-                    <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-[12px] sm:text-[13px] font-black text-slate-600 hover:bg-slate-50 rounded-lg transition-colors">
-                      <LogOut className="w-4 h-4" />
+                    <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 text-[12px] sm:text-[13px] font-black text-slate-600 hover:bg-slate-50 rounded-lg transition-colors text-left">
+                      <LogOut className="w-4 h-4 text-slate-400" />
                       Sign Out (Cloud Persist)
                     </button>
-                    <button onClick={handleClearData} className="w-full flex items-center justify-between px-4 py-3 text-[12px] sm:text-[13px] font-black text-rose-500 hover:bg-rose-50 rounded-lg transition-all group">
-                      <div className="flex items-center gap-3"><Trash2 className="w-4 h-4" />Delete Cloud Account</div>
-                      <ChevronRight className="w-4 h-4 opacity-30" />
+                    <button onClick={handleClearData} className="w-full flex items-center justify-between px-4 py-3 text-[12px] sm:text-[13px] font-black text-rose-500 hover:bg-rose-50 rounded-lg transition-all group text-left">
+                      <div className="flex items-center gap-3"><Trash2 className="w-4 h-4" />Delete Everything</div>
+                      <ChevronRight className="w-4 h-4 opacity-30 group-hover:translate-x-1 transition-transform" />
                     </button>
                   </div>
                 </div>

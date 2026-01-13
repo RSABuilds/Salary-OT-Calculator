@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef } from 'react';
 import { AppSettings } from '../types';
 import { DollarSign, Clock, CalendarDays, Zap, X, MapPin } from 'lucide-react';
 
@@ -7,24 +8,36 @@ interface SettingsPanelProps {
   onSettingsChange: (newSettings: AppSettings) => void;
 }
 
+// 1. Move NumericInput OUTSIDE to keep it stable across renders
 const NumericInput = ({ value, onChange, placeholder, className, name, inputMode = "decimal" }: any) => {
-  const [localValue, setLocalValue] = useState(value === 0 ? '' : value.toString());
-
+  // We keep a string state to allow "0.", empty strings, etc. while typing
+  const [displayValue, setDisplayValue] = useState(value === 0 ? '' : value.toString());
+  
+  // Sync display value if the PROP value changes externally (e.g. from cloud or profile change)
+  // but DON'T sync if the numeric value is the same as what we're currently typing
   useEffect(() => {
-    const currentNum = parseFloat(localValue) || 0;
-    if (value !== currentNum) {
-      setLocalValue(value === 0 ? '' : value.toString());
+    const numericCurrent = parseFloat(displayValue) || 0;
+    if (value !== numericCurrent) {
+      setDisplayValue(value === 0 ? '' : value.toString());
     }
   }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
-    const sanitized = val.replace(/[^0-9.]/g, '');
-    const parts = sanitized.split('.');
-    const finalVal = parts[0] + (parts.length > 1 ? '.' + parts.slice(1).join('') : '');
-    setLocalValue(finalVal);
-    const numeric = parseFloat(finalVal);
-    onChange(!isNaN(numeric) ? numeric : 0);
+    
+    // Allow digits and one decimal point only
+    const clean = val.replace(/[^0-9.]/g, '');
+    const parts = clean.split('.');
+    const sanitized = parts[0] + (parts.length > 1 ? '.' + parts.slice(1).join('') : '');
+    
+    setDisplayValue(sanitized);
+    
+    const numeric = parseFloat(sanitized);
+    if (!isNaN(numeric)) {
+      onChange(numeric);
+    } else if (sanitized === '') {
+      onChange(0);
+    }
   };
 
   const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
@@ -36,7 +49,7 @@ const NumericInput = ({ value, onChange, placeholder, className, name, inputMode
       type="text"
       name={name}
       inputMode={inputMode}
-      value={localValue}
+      value={displayValue}
       onChange={handleChange}
       onFocus={handleFocus}
       placeholder={placeholder}
@@ -44,6 +57,23 @@ const NumericInput = ({ value, onChange, placeholder, className, name, inputMode
     />
   );
 };
+
+// 2. Move InputRow OUTSIDE to prevent unmounting/focus-loss
+const InputRow = ({ icon: Icon, label, children }: any) => (
+  <div className="flex flex-col gap-2 py-4 group">
+    <div className="flex items-center gap-2.5 mb-0.5 px-0.5">
+      <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-500 group-focus-within:bg-indigo-600 group-focus-within:text-white transition-all duration-300">
+        <Icon className="w-3.5 h-3.5" />
+      </div>
+      <span className="text-[12px] font-black text-slate-500 tracking-tight uppercase group-focus-within:text-indigo-600 transition-colors">
+        {label}
+      </span>
+    </div>
+    <div className="relative">
+      {children}
+    </div>
+  </div>
+);
 
 const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChange }) => {
   const handleValueChange = (name: keyof AppSettings, value: any) => {
@@ -60,21 +90,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChang
 
   const inputBaseClass = "w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-3 px-4 font-black text-right outline-none transition-all duration-300 placeholder:text-slate-300 focus:bg-white focus:border-indigo-500 focus:ring-8 focus:ring-indigo-500/5";
 
-  const InputRow = ({ icon: Icon, label, name, children }: any) => (
-    <div className="flex flex-col gap-2 py-4 group">
-      <div className="flex items-center gap-2.5 mb-0.5 px-0.5">
-        <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-500 group-focus-within:bg-indigo-600 group-focus-within:text-white transition-all duration-300">
-          <Icon className="w-3.5 h-3.5" />
-        </div>
-        <span className="text-[12px] font-black text-slate-500 tracking-tight uppercase group-focus-within:text-indigo-600 transition-colors">{label}</span>
-      </div>
-      
-      <div className="relative">
-        {children}
-      </div>
-    </div>
-  );
-
   return (
     <div className="space-y-6 h-full">
       <div className="bg-white rounded-[2rem] sm:rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.04)] border border-black/[0.02] overflow-hidden">
@@ -88,7 +103,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChang
 
         <div className="px-6 sm:p-8 pb-8 pt-2 space-y-0.5">
           <div className="divide-y divide-black/[0.03]">
-            {/* Display Read-only Country Info */}
+            {/* Display Region Info */}
             <div className="flex items-center justify-between py-4 px-0.5 opacity-60">
               <div className="flex items-center gap-2.5">
                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
@@ -97,7 +112,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChang
               <span className="text-[11px] font-black text-indigo-600 uppercase tracking-widest">{settings.countryName} ({settings.currency})</span>
             </div>
 
-            <InputRow icon={DollarSign} label={`Monthly Salary (${settings.currencySymbol})`} name="monthlySalary">
+            <InputRow icon={DollarSign} label={`Monthly Salary (${settings.currencySymbol})`}>
               <NumericInput
                 name="monthlySalary"
                 value={settings.monthlySalary}
@@ -111,7 +126,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChang
             </InputRow>
             
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
-              <InputRow icon={CalendarDays} label="Days" name="workingDaysPerMonth">
+              <InputRow icon={CalendarDays} label="Days">
                 <NumericInput
                   name="workingDaysPerMonth"
                   inputMode="numeric"
@@ -122,7 +137,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChang
                 />
               </InputRow>
 
-              <InputRow icon={Clock} label="Hrs/Day" name="workingHoursPerDay">
+              <InputRow icon={Clock} label="Hrs/Day">
                 <NumericInput
                   name="workingHoursPerDay"
                   value={settings.workingHoursPerDay}
@@ -140,13 +155,13 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChang
                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">OT Mode</span>
                 <div className="flex bg-slate-200/50 p-1 rounded-lg">
                   <button 
-                    onClick={() => onSettingsChange({...settings, otRateMode: 'auto'})}
+                    onClick={() => handleValueChange('otRateMode', 'auto')}
                     className={`px-3 py-1.5 text-[9px] font-black rounded-md transition-all ${settings.otRateMode === 'auto' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
                   >
                     SYNC
                   </button>
                   <button 
-                    onClick={() => onSettingsChange({...settings, otRateMode: 'manual'})}
+                    onClick={() => handleValueChange('otRateMode', 'manual')}
                     className={`px-3 py-1.5 text-[9px] font-black rounded-md transition-all ${settings.otRateMode === 'manual' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500'}`}
                   >
                     MANUAL
@@ -166,9 +181,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ settings, onSettingsChang
                       name="manualOtRate"
                       value={settings.manualOtRate}
                       onChange={(val: number) => handleValueChange('manualOtRate', val)}
-                      className="w-full px-5 py-4 rounded-xl border border-slate-200 bg-white font-black text-xl outline-none text-right"
+                      className={`${inputBaseClass} text-slate-900 text-xl pr-10`}
+                      placeholder="0.00"
                     />
-                    <span className="absolute left-5 top-1/2 -translate-y-1/2 text-[10px] text-slate-300 font-black uppercase">{settings.currencySymbol}</span>
+                    <span className="absolute left-5 top-1/2 -translate-y-1/2 text-[10px] text-slate-300 font-black uppercase pointer-events-none">{settings.currencySymbol}</span>
                   </div>
                 )}
                 <div className="absolute right-4 -bottom-2 px-1.5 py-0.5 bg-white border border-slate-100 rounded-md shadow-sm">

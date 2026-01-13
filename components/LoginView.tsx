@@ -180,10 +180,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           <div className="bg-slate-900 w-16 h-16 rounded-[1.5rem] flex items-center justify-center shadow-2xl shadow-slate-300 mb-6">
             <Briefcase className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight leading-none uppercase text-center">
-            Salary <span className="text-indigo-600">OT Calculator</span>
-          </h1>
-          <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] mt-3">Identity Recovery & Cloud Storage</p>
         </div>
 
         {/* Login Card */}
@@ -204,7 +200,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
           
           <div className="relative z-10">
             <h2 className="text-2xl font-black text-slate-900 mb-2 tracking-tight">Access Your Profile</h2>
-            <p className="text-slate-400 font-bold text-sm mb-8">Enter your mobile number to restore your previous calculation data automatically.</p>
 
             <form onSubmit={handleSubmit} className="space-y-8">
               {/* Mobile Input */}

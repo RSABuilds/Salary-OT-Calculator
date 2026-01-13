@@ -11,6 +11,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Excel Generation Library -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         body { 
           font-family: 'Plus Jakarta Sans', sans-serif; 
@@ -21,104 +23,10 @@
           width: 6px;
           height: 6px;
         }
-        ::-webkit-scrollbar-track {
-          background: transparent;
-        }
+        ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb {
           background: #e2e8f0;
           border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: #cbd5e1;
-        }
-        .glass-card {
-          background: rgba(255, 255, 255, 0.8);
-          backdrop-filter: blur(12px);
-          border: 1px solid rgba(255, 255, 255, 0.3);
-        }
-
-        /* Professional Print Optimization for PDF Export */
-        @media print {
-          @page {
-            size: A4;
-            margin: 15mm;
-          }
-          body {
-            background: white !important;
-            color: #0f172a !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          /* Hide non-essential UI */
-          header, 
-          .xl\:col-span-4, 
-          button, 
-          input,
-          .bg-emerald-500.animate-pulse,
-          [ref="profileMenuRef"],
-          .mt-8.pt-6.border-t.border-slate-50,
-          .shadow-2xl,
-          .shadow-xl,
-          .shadow-lg {
-            display: none !important;
-          }
-          
-          /* Force layout to take full width */
-          main {
-            padding: 0 !important;
-            margin: 0 !important;
-            max-width: 100% !important;
-          }
-          .xl\:col-span-8, .xl\:col-span-12, .grid {
-            display: block !important;
-            width: 100% !important;
-          }
-          .grid-cols-2, .grid-cols-4, .lg\:grid-cols-3, .md\:grid-cols-3 {
-            display: grid !important;
-            grid-template-columns: repeat(3, 1fr) !important;
-            gap: 10px !important;
-          }
-          
-          /* Ensure charts and cards look premium */
-          .bg-white {
-            border: 1px solid #e2e8f0 !important;
-            border-radius: 15px !important;
-            box-shadow: none !important;
-            break-inside: avoid;
-            margin-bottom: 20px;
-          }
-          .bg-slate-900 {
-            background-color: #0f172a !important;
-            color: white !important;
-            border-radius: 15px !important;
-            break-inside: avoid;
-          }
-          
-          .print-header {
-            display: flex !important;
-            justify-content: justify-between;
-            align-items: center;
-            border-bottom: 2px solid #0f172a;
-            padding-bottom: 10px;
-            margin-bottom: 30px;
-          }
-
-          .recharts-legend-wrapper {
-            display: block !important;
-          }
-          
-          .text-slate-900 { color: #0f172a !important; }
-          .text-slate-400 { color: #64748b !important; }
-          .text-indigo-600 { color: #4f46e5 !important; }
-          
-          /* Titles and Text */
-          .text-2xl { font-size: 16pt !important; }
-          .text-3xl { font-size: 20pt !important; }
-          .text-4xl, .text-5xl { font-size: 28pt !important; }
-        }
-
-        .print-header {
-          display: none;
         }
     </style>
 <script type="importmap">
@@ -136,28 +44,14 @@
 <body class="bg-[#F8FAFC] text-slate-900 overflow-x-hidden">
     <div id="root"></div>
     <script>
-        // Use a more robust check and path resolution for Service Workers
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 try {
-                    // Robustly resolve the service worker URL relative to the current script's origin
-                    // This avoids 'Invalid URL' construction issues and 'Origin Mismatch' in sandboxes
                     const currentUrl = window.location.href.split('?')[0].split('#')[0];
                     const baseUrl = currentUrl.endsWith('/') ? currentUrl : currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
                     const swUrl = baseUrl + 'sw.js';
-                    
-                    navigator.serviceWorker.register(swUrl)
-                        .then(reg => {
-                            console.log('Service Worker registered successfully');
-                        })
-                        .catch(err => {
-                            // In some preview/sandbox environments, SW registration is intentionally blocked.
-                            console.warn('Service Worker registration skipped or failed:', err.message);
-                        });
-                } catch (e) {
-                    // Silently fail if location or navigator properties are restricted
-                    console.log('SW registration logic skipped due to environment restrictions.');
-                }
+                    navigator.serviceWorker.register(swUrl).catch(() => {});
+                } catch (e) {}
             });
         }
     </script>
